@@ -2,7 +2,7 @@ require "faraday"
 require "json"
 require "pp"
 
-conn = Faraday.new(:url => "https://rubygems.org/api/v1/gems/rails.json")
+conn = Faraday.new(:url => "https://rubygems.org/api/v1/gems/sinatra.json")
 
 
 response = conn.get
