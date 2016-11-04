@@ -2,23 +2,45 @@ require "faraday"
 require "json"
 
 class GemRepo
+  attr_reader :cache
+
+  def initialize
+    @cache = {}
+  end
 
   def base_url
     "https://rubygems.org/api/v1/gems"
   end
 
+  def to_weighted_csv(gem)
+    result = dependency_tree(gem)
+    flattened = result.map { |t| t.values.join(",") }
+    tallies = result.each_with_object(Hash.new(0)) do |dependency, hash|
+      hash[dependency] += 1
+    end
+    tallies.map do |key, value|
+      (key.values + [value]).join(",")
+    end
+  end
+
   def get_runtime_dependencies(gem)
+    cached = cache.fetch(gem, nil)
+
+    return cached if cached
+
     url = "#{base_url}/#{gem}.json"
     conn = Faraday.new(:url => url)
     response = conn.get
     json = JSON.parse( response.body, {symbolize_names: true} )
-    json.fetch(:dependencies, {}).fetch(:runtime, [])
+    runtime = json.fetch(:dependencies, {}).fetch(:runtime, [])
+    development = json.fetch(:dependencies, {}).fetch(:development, [])
+    cache[gem] = runtime
   end
 
   def dependency_tree(gem)
     dependencies = get_runtime_dependencies(gem)
-    dependencies.map do |dependency|
-      { gem: gem, requires: dependency[:name] }
+    dependencies.flat_map do |dependency|
+      [{ gem: gem, requires: dependency[:name] }] + dependency_tree(dependency[:name])
     end
   end
 
@@ -99,3 +121,7 @@ describe GemRepo do
     end
   end
 end
+
+# result = repo.dependency_tree("rails")
+# x = result.map { |t| t.values.join(",") }
+# File.open("./test.csv", "w") { |f| f.puts(x.uniq.sort) }
